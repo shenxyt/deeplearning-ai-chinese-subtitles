@@ -150,7 +150,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'clearCache') {
-    chrome.storage.local.clear().then(() => sendResponse({ ok: true }));
+    // 只清字幕缓存(subs:*),不动待办任务等其他数据
+    chrome.storage.local.get(null)
+      .then(all => chrome.storage.local.remove(Object.keys(all).filter(k => k.startsWith(CACHE_PREFIX))))
+      .then(() => sendResponse({ ok: true }));
     return true;
   }
 });
+
+// ---- 待执行任务角标:扩展图标上显示未完成数量 ----
+
+const TASKS_KEY = 'tasks:links';
+
+async function updateBadge() {
+  const data = await chrome.storage.local.get(TASKS_KEY);
+  const pending = (data[TASKS_KEY] || []).filter(t => !t.done).length;
+  await chrome.action.setBadgeText({ text: pending ? String(pending) : '' });
+  await chrome.action.setBadgeBackgroundColor({ color: '#1a73e8' });
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes[TASKS_KEY]) updateBadge();
+});
+chrome.runtime.onInstalled.addListener(updateBadge);
+chrome.runtime.onStartup.addListener(updateBadge);
